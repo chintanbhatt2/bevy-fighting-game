@@ -1,0 +1,12 @@
+[package]
+name = "bevy-fighting-game"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = "0.13.2"
+bevy_editor_pls = "0.8.1"
+
+
+[patch.crates-io]
+bevy-inspector-egui ={ git = "https://github.com/naomijub/bevy-inspector-egui.git" }
