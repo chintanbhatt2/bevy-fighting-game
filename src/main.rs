@@ -3,6 +3,7 @@ use std::default;
 
 use bevy::{prelude::*, utils::HashMap};
 use bevy_editor_pls::prelude::*;
+use bevy_tweening::TweeningPlugin;
 mod player;
 
 fn main() {
@@ -10,6 +11,7 @@ fn main() {
         .add_plugins((DefaultPlugins))
         .add_plugins(DevelopmentPlugin)
         .add_plugins(player::PlayerPlugin)
+        .add_plugins(TweeningPlugin)
         .add_systems(Startup, (setup))
         .add_systems(Update, (score_point))
         .insert_resource(Controls::default())

@@ -1,0 +1,45 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'bevy-fighting-game'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=bevy-fighting-game",
+                    "--package=bevy-fighting-game"
+                ],
+                "filter": {
+                    "name": "bevy-fighting-game",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug unit tests in executable 'bevy-fighting-game'",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--bin=bevy-fighting-game",
+                    "--package=bevy-fighting-game"
+                ],
+                "filter": {
+                    "name": "bevy-fighting-game",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}

@@ -1,4 +1,7 @@
+use std::time::Duration;
+
 use bevy::{ecs::query, prelude::*, sprite::{MaterialMesh2dBundle, Mesh2dHandle}};
+use bevy_tweening::{lens::TransformPositionLens, Animator, EaseFunction, Tween};
 
 use crate::{player, Controls};
 pub struct PlayerPlugin;
@@ -9,12 +12,23 @@ impl Plugin for PlayerPlugin {
             .add_event::<AttackEvent>()
             .add_event::<PlayerStateChangeEvent>()
             .add_event::<ClashEvent>()
+            .register_type::<Player>()
             .add_systems(Startup, (spawn_players))
-            .add_systems(Update, (move_player, player_taking_damage, reset_player, check_attack_hit, update_player_color, clash_players));
+            .add_systems(Update, (player_timer_update, move_player, player_taking_damage, reset_player, check_attack_hit, update_player_color, clash_players, push_back_player_with_clash));
     }
 }
 
-#[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
+
+#[derive(Event)]
+pub struct AttackEvent(Entity);
+
+#[derive(Event)]
+pub struct PlayerStateChangeEvent(pub Entity, pub PlayerState);
+
+#[derive(Event)]
+struct ClashEvent(Entity, Entity);
+
+#[derive(Debug, Default, PartialEq, Eq, Clone, Copy, Reflect)]
 pub enum PlayerState{
     #[default]
     Alive,
@@ -24,7 +38,9 @@ pub enum PlayerState{
     Wiff,
 }
 
-#[derive(Debug, Component)]
+
+
+#[derive(Debug, Component, Reflect)]
 pub struct Player{
     pub player_number: u8,
     pub state: PlayerState,
@@ -32,6 +48,7 @@ pub struct Player{
     pub attack_timer: Timer,
     //200ms timer
     pub parry_timer: Timer,
+    pub clashing_timer: Timer,
 }
 
 impl Default for Player{
@@ -40,42 +57,61 @@ impl Default for Player{
             player_number: 0,
             state: PlayerState::Alive,
             color_mesh_handle: Default::default(),
-            attack_timer: Timer::from_seconds(2.0, TimerMode::Once),
+            attack_timer: Timer::from_seconds(0.5, TimerMode::Once),
             parry_timer: Timer::from_seconds(0.2, TimerMode::Once),
+            clashing_timer: Timer::from_seconds(1.0, TimerMode::Once),
         }
     }
 
 }
 
-#[derive(Event)]
-pub struct AttackEvent(Entity);
 
 
 fn reset_player(
     keyboard_input: Res<ButtonInput<KeyCode>>,
-    mut query: Query<(&mut Player, Entity)>,
+    mut query: Query<(&mut Player, Entity, &mut Transform)>,
     mut ev_player_state_change: EventWriter<PlayerStateChangeEvent>,
 ){
     if keyboard_input.just_pressed(KeyCode::KeyR){
-        for mut p in query.iter_mut(){
-            p.0.state = PlayerState::Alive;
-            ev_player_state_change.send(PlayerStateChangeEvent(p.1, PlayerState::Alive));
+        let mut p1 = None;
+        let mut p2 = None;
+        for p in query.iter_mut(){
+            if p.0.player_number == 1{
+                p1 = Some(p);
+            } else {
+                p2 = Some(p);
+            }    
         }
+        if p1.is_none() || p2.is_none(){
+            return;
+        }
+
+        let (mut player1, entity1, mut t1) = p1.unwrap();
+        let (mut player2, entity2, mut t2) = p2.unwrap();
+
+        
+        player1.state = PlayerState::Alive;
+
+        t1.translation.x = -200.0;
+        t2.translation.x = 200.0;
+
+        player2.state = PlayerState::Alive;
+        ev_player_state_change.send(PlayerStateChangeEvent(entity1, PlayerState::Alive));
+        ev_player_state_change.send(PlayerStateChangeEvent(entity2, PlayerState::Alive));
     }
+
 }
 
 fn move_player(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     controls: Res<super::Controls>,
-    mut query: Query<(&Player, &mut Transform, Entity)>,
+    mut query: Query<(&mut Player, &mut Transform, Entity)>,
     mut ev_attack: EventWriter<AttackEvent>,
 ){
-
     const MOVE_AMOUNT: f32 = 10.0;
-
-    for (player, mut transform, entity) in query.iter_mut(){
+    for (mut player, mut transform, entity) in query.iter_mut(){
         if let Some(controls) = controls.control_map.get(&entity){
-            if matches!(player.state, PlayerState::Alive | PlayerState::TakingDamage | PlayerState::Wiff | PlayerState::Clashing) {
+            if matches!(player.state, PlayerState::Alive | PlayerState::TakingDamage | PlayerState::Wiff) {
                 if keyboard_input.pressed(controls.right) {
                     transform.translation.x += MOVE_AMOUNT;
                 }
@@ -84,10 +120,8 @@ fn move_player(
                 }
             }
             if matches!(player.state, PlayerState::Alive | PlayerState::TakingDamage) {
-                if player.attack_timer.finished(){
-                    if keyboard_input.pressed(controls.attack){
-                        ev_attack.send(AttackEvent(entity));
-                    }
+                if keyboard_input.just_pressed(controls.attack){
+                    player_attack(&mut ev_attack, &mut player, &entity);
                 }
             }
         }
@@ -96,80 +130,137 @@ fn move_player(
 }
 
 
-#[derive(Event)]
-pub struct PlayerStateChangeEvent(pub Entity, pub PlayerState);
-
-#[derive(Event)]
-struct ClashEvent;
-
-fn check_attack_hit(
-    mut ev_attack: EventReader<AttackEvent>,
-    mut ev_player_state_change: EventWriter<PlayerStateChangeEvent>,
-    mut query: Query<( &mut Player, &Transform, Entity )>,
+fn player_attack(
+    ev_attack: &mut EventWriter<AttackEvent>,
+    player: &mut Player,
+    entity: &Entity,
 ){
-    
-    let mut player_1 = None;
-    let mut player_2 = None;
-    for q in query.iter_mut(){
-        if q.0.player_number == 1 && q.0.state == PlayerState::Alive{
-            player_1 = Some(q);
-        }
-        else if q.0.player_number == 2 && q.0.state == PlayerState::Alive{
-            player_2 = Some(q);
-        }
-    }
-    if player_1.is_none() || player_2.is_none(){
-        return;
-    }
-
-    let mut player_1 = player_1.unwrap();
-    let mut player_2 = player_2.unwrap();
-    
-    for ev in ev_attack.read(){
-        if ev.0 == player_1.2{
-            if (player_1.1.translation.x - player_2.1.translation.x).abs() < 100.0{
-                println!("Player 1 hit Player 2");
-                player_2.0.state = PlayerState::TakingDamage;
-                ev_player_state_change.send(PlayerStateChangeEvent(player_2.2, PlayerState::TakingDamage));
-            }
-        }
-        if ev.0 == player_2.2{
-            if (player_2.1.translation.x - player_1.1.translation.x).abs() < 100.0{
-                println!("Player 2 hit Player 1");
-                player_1.0.state = PlayerState::TakingDamage;
-                ev_player_state_change.send(PlayerStateChangeEvent(player_1.2, PlayerState::TakingDamage));
-            }
-        }
+    println!("Player {:?} attack timer: {:?}", player.player_number, player.attack_timer.elapsed_secs());
+    if player.attack_timer.finished() {
+        println!("Player {:?} attacking!", player.player_number);
+        player.attack_timer.reset();
+        ev_attack.send(AttackEvent(entity.clone()));
     }
 }
 
+fn check_attack_hit(
+    mut ev_attack: EventReader<AttackEvent>,
+    mut ev_clash: EventWriter<ClashEvent>,
+    mut ev_player_state_change: EventWriter<PlayerStateChangeEvent>,
+    mut query: Query<( &mut Player, &Transform, Entity )>,
+){
+    for ev in ev_attack.read(){
+        let mut attacking_player = None;;
+        let mut defending_player = None;;
+
+        for p in query.iter_mut(){
+            if p.2 == ev.0{
+                attacking_player = Some(p);
+            } else {
+                defending_player = Some(p);
+            }
+        }
+
+        if attacking_player.is_none() || defending_player.is_none(){
+            continue;
+        }
+
+        let mut attacking_player = attacking_player.unwrap();
+        let mut defending_player = defending_player.unwrap();
+
+
+        if attacking_player.1.translation.distance(defending_player.1.translation) < 100.0{
+            
+            if attacking_player.0.state == PlayerState::TakingDamage{
+                println!("Player {:?} parried!", attacking_player.0.player_number);
+                attacking_player.0.state = PlayerState::Clashing;
+                defending_player.0.state = PlayerState::Clashing;
+                ev_player_state_change.send(PlayerStateChangeEvent(attacking_player.2, PlayerState::Clashing));
+                ev_player_state_change.send(PlayerStateChangeEvent(defending_player.2, PlayerState::Clashing));
+                ev_clash.send(ClashEvent(attacking_player.2, defending_player.2));
+            }
+            else {
+                match defending_player.0.state {
+                    PlayerState::Alive => {
+                        defending_player.0.state = PlayerState::TakingDamage;
+                        ev_player_state_change.send(PlayerStateChangeEvent(defending_player.2, PlayerState::TakingDamage));
+                    }
+                    _ => {}
+                }
+            }
+        }
+        else {
+            ev_player_state_change.send(PlayerStateChangeEvent(attacking_player.2, PlayerState::Wiff));
+        }
+
+    }
+}
+
+
+#[derive(Component)]
+struct ClashPushback{
+    pub offset: i8,
+    pub timer: Timer,
+}
 
 fn clash_players(
     mut ev_clash: EventReader<ClashEvent>,
     mut query: Query<(&mut Player, &mut Transform)>,
+    mut commands: Commands,
 ){
-    for _ in ev_clash.read(){
-        let mut player_1 = None;
-        let mut player_2 = None;
-        for q in query.iter_mut(){
-            if q.0.player_number == 1 && q.0.state == PlayerState::Alive{
-                player_1 = Some(q);
-            }
-            else if q.0.player_number == 2 && q.0.state == PlayerState::Alive{
-                player_2 = Some(q);
-            }
-        }
-        if player_1.is_none() || player_2.is_none(){
-            return;
-        }
-        let mut player_1 = player_1.unwrap();
-        let mut player_2 = player_2.unwrap();
+    for ev in ev_clash.read(){
+        let p1 = query.get_mut(ev.0);
+        let p2 = query.get_mut(ev.1);
 
-        player_1.1.translation.x = -10.0;
-        player_2.1.translation.x = 10.0;
+        
+        if p1.is_err() || p2.is_err(){
+            continue;
+        }
+        
+        
+        let (mut p1, t1) = p1.unwrap();
+        let (mut p2, t2) = p2.unwrap();
+
+        p1.state = PlayerState::Clashing;
+        p2.state = PlayerState::Clashing;
+
+        let p1_offset = if (t1.translation.x < t2.translation.x) { -1 } else { 1 };
+        let p2_offset = p1_offset * -1;
+
+        // commands.entity(ev.0).insert(ClashPushback{offset: p1_offset, timer: Timer::from_seconds(0.8, TimerMode::Once)});
+        // commands.entity(ev.1).insert(ClashPushback{offset: p2_offset, timer: Timer::from_seconds(0.8, TimerMode::Once)});
+        
+        commands.entity(ev.0).insert(Animator::new(Tween::new(
+            EaseFunction::QuadraticOut,
+            Duration::from_secs_f32(1.4),
+            TransformPositionLens{
+                start: t1.translation,
+                end: Vec3::new(t1.translation.x + (p1_offset as f32 * 100.0), t1.translation.y, t1.translation.z),
+            }
+        )));
+                
+        commands.entity(ev.1).insert(Animator::new(Tween::new(
+            EaseFunction::QuadraticOut,
+            Duration::from_secs_f32(1.4),
+            TransformPositionLens{
+                start: t2.translation,
+                end: Vec3::new(t2.translation.x + (p2_offset as f32 * 100.0), t2.translation.y, t2.translation.z),
+            }
+        )));
     }
 }
 
+fn push_back_player_with_clash(
+    mut query: Query<(&mut Player, &mut Transform, &mut ClashPushback, Entity)>,
+    time: Res<Time>,
+){
+    for (mut player, mut transform, mut clash_pushback, entity) in query.iter_mut(){
+        clash_pushback.timer.tick(time.delta());
+        if clash_pushback.timer.finished(){
+            player.state = PlayerState::Alive;
+        }
+    }
+}
 
 fn spawn_players(
     mut commands: Commands,
@@ -222,13 +313,39 @@ fn player_taking_damage(
     mut ev_player_state_change: EventWriter<PlayerStateChangeEvent>,
 ){
     for (mut player, entity) in query.iter_mut(){
-        if player.state == PlayerState::TakingDamage && player.parry_timer.finished(){
-            player.state = PlayerState::Dead;
-            ev_player_state_change.send(PlayerStateChangeEvent(entity, PlayerState::Dead));
+        if matches!(player.state, PlayerState::TakingDamage){
+            if player.parry_timer.finished(){
+                player.state = PlayerState::Dead;
+                ev_player_state_change.send(PlayerStateChangeEvent(entity, PlayerState::Dead));
+            }
         }
     }
 }
 
+
+fn player_timer_update(
+    time: Res<Time>,
+    mut query: Query<(&mut Player, Entity)>,
+    mut ev_player_state_change: EventWriter<PlayerStateChangeEvent>,
+){
+    for (mut player, entity) in query.iter_mut(){
+        player.parry_timer.tick(time.delta());
+        player.attack_timer.tick(time.delta());
+        player.clashing_timer.tick(time.delta());
+        if player.parry_timer.just_finished() && player.state == PlayerState::TakingDamage {
+            player.state = PlayerState::Dead;
+            ev_player_state_change.send(PlayerStateChangeEvent(entity, PlayerState::Dead));
+        }
+        if player.attack_timer.finished() && player.state == PlayerState::Wiff {
+            player.state = PlayerState::Alive;
+            ev_player_state_change.send(PlayerStateChangeEvent(entity, PlayerState::Alive));
+        }
+        if player.clashing_timer.finished() && player.state == PlayerState::Clashing {
+            player.state = PlayerState::Alive;
+            ev_player_state_change.send(PlayerStateChangeEvent(entity, PlayerState::Alive));
+        }
+    }
+}
 
 
 fn update_player_color(
@@ -257,15 +374,10 @@ fn update_player_color(
                     materials.get_mut(&player.color_mesh_handle).unwrap().color = Color::rgb(1.0, 1.0, 1.0);
                 }
                 PlayerState::Wiff => {
-                    if player.player_number == 1{
-                        materials.get_mut(&player.color_mesh_handle).unwrap().color = Color::rgb(1.0 * 0.8, 0.7* 0.8, 0.6* 0.8);
-                    } else {
-                        materials.get_mut(&player.color_mesh_handle).unwrap().color = Color::rgb(0.8* 0.8, 1.0* 0.8, 0.6* 0.8);
-                    }
+                    let _ = materials.get_mut(&player.color_mesh_handle).unwrap().color * 0.8;
                 }
                 PlayerState::TakingDamage => {}
             }
         }
     }
-
 }
