@@ -1,5 +1,4 @@
 
-use std::default;
 
 use bevy::{prelude::*, utils::HashMap};
 use bevy_editor_pls::prelude::*;
@@ -8,12 +7,12 @@ mod player;
 
 fn main() {
     App::default()
-        .add_plugins((DefaultPlugins))
+        .add_plugins(DefaultPlugins)
         .add_plugins(DevelopmentPlugin)
         .add_plugins(player::PlayerPlugin)
         .add_plugins(TweeningPlugin)
-        .add_systems(Startup, (setup))
-        .add_systems(Update, (score_point))
+        .add_systems(Startup, setup)
+        .add_systems(Update, score_point)
         .insert_resource(Controls::default())
         .insert_resource(Points::default())
         .run();
@@ -112,7 +111,7 @@ fn setup(mut commands: Commands){
 fn score_point(
     mut ev_player_state_change: EventReader<player::PlayerStateChangeEvent>,
     mut points: ResMut<Points>,
-    query: Query<(&player::Player)>,
+    query: Query<&player::Player>,
 ){
     for event in ev_player_state_change.read(){
         if event.1 == player::PlayerState::Dead{

@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use bevy::{ecs::query, prelude::*, sprite::{MaterialMesh2dBundle, Mesh2dHandle}};
+use bevy::{prelude::*, sprite::{MaterialMesh2dBundle, Mesh2dHandle}};
 use bevy_tweening::{lens::TransformPositionLens, Animator, EaseFunction, Tween};
 
-use crate::{player, Controls};
+use crate::{Controls};
 pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
@@ -13,7 +13,7 @@ impl Plugin for PlayerPlugin {
             .add_event::<PlayerStateChangeEvent>()
             .add_event::<ClashEvent>()
             .register_type::<Player>()
-            .add_systems(Startup, (spawn_players))
+            .add_systems(Startup, spawn_players)
             .add_systems(Update, (player_timer_update, move_player, player_taking_damage, reset_player, check_attack_hit, update_player_color, clash_players, push_back_player_with_clash));
     }
 }
@@ -209,11 +209,17 @@ fn clash_players(
     mut commands: Commands,
 ){
     for ev in ev_clash.read(){
-        let p1 = query.get_mut(ev.0);
-        let p2 = query.get_mut(ev.1);
+        let mut p1 = None;
+        let mut p2 = None;
+        for p in query.iter_mut(){
+            if p.0.player_number == 1{
+                p1 = Some(p);
+            } else {
+                p2 = Some(p);
+            }
+        }
 
-        
-        if p1.is_err() || p2.is_err(){
+        if p1.is_none() || p2.is_none(){
             continue;
         }
         
@@ -224,7 +230,7 @@ fn clash_players(
         p1.state = PlayerState::Clashing;
         p2.state = PlayerState::Clashing;
 
-        let p1_offset = if (t1.translation.x < t2.translation.x) { -1 } else { 1 };
+        let p1_offset = if t1.translation.x < t2.translation.x { -1 } else { 1 };
         let p2_offset = p1_offset * -1;
 
         // commands.entity(ev.0).insert(ClashPushback{offset: p1_offset, timer: Timer::from_seconds(0.8, TimerMode::Once)});
@@ -254,7 +260,7 @@ fn push_back_player_with_clash(
     mut query: Query<(&mut Player, &mut Transform, &mut ClashPushback, Entity)>,
     time: Res<Time>,
 ){
-    for (mut player, mut transform, mut clash_pushback, entity) in query.iter_mut(){
+    for (mut player, transform, mut clash_pushback, entity) in query.iter_mut(){
         clash_pushback.timer.tick(time.delta());
         if clash_pushback.timer.finished(){
             player.state = PlayerState::Alive;
