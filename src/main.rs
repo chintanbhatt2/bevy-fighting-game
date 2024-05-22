@@ -1,6 +1,8 @@
 
 
-use bevy::{prelude::*, utils::HashMap};
+use std::time::Duration;
+
+use bevy::{ecs::system::RunSystemOnce, input::keyboard::{self, KeyboardInput}, prelude::*, render::camera::RenderTarget, utils::HashMap, window::WindowRef};
 use bevy_editor_pls::prelude::*;
 use bevy_tweening::TweeningPlugin;
 mod player;
@@ -8,11 +10,13 @@ mod player;
 fn main() {
     App::default()
         .add_plugins(DefaultPlugins)
-        .add_plugins(DevelopmentPlugin)
         .add_plugins(player::PlayerPlugin)
+        .add_plugins(DevelopmentPlugin)
         .add_plugins(TweeningPlugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, score_point)
+        .add_systems(Update, (reset_points,score_point,update_ui))
+        .register_type::<Controls>()
+        .register_type::<Points>()
         .insert_resource(Controls::default())
         .insert_resource(Points::default())
         .run();
@@ -27,7 +31,7 @@ impl Plugin for DevelopmentPlugin{
 }
 
 
-#[derive(Debug)]
+#[derive(Debug, Reflect)]
 struct ControlPerPlayer{
     right: KeyCode,
     left: KeyCode,
@@ -44,84 +48,213 @@ impl Default for ControlPerPlayer{
     }
 }
 
-#[derive(Debug, Resource, Default)]
+#[derive(Debug, Resource, Default, Reflect)]
 struct Controls{
     control_map: HashMap<Entity, ControlPerPlayer>,
 }
 
 
-#[derive(Debug, Resource, Default)]
+#[derive(Debug, Resource, Reflect, Clone)]
+#[reflect(Resource)]
 struct Points{
     player_1: u32,
     player_2: u32,
+    reset_timer: Timer,
 }
 
+impl Default for Points{
+    fn default() -> Self{
+        let mut timer = Timer::from_seconds(3.0, TimerMode::Once);
+        timer.set_elapsed(Duration::from_secs(3));
+
+        Points{
+            player_1: 0,
+            player_2: 0,
+            reset_timer: timer,
+        }
+    }
+
+}
+
+#[derive(Debug)]
+pub enum UIComponent{
+    PlayerOneScore,
+    ClashCounter,
+    PlayerTwoScore,
+}
+
+#[derive(Debug, Component)]
+pub struct EditableUIComponent(pub UIComponent);
 
 
+fn update_ui(
+    mut query: Query<(&EditableUIComponent, &mut Text)>,
+    points: Res<Points>,
+    clash_counter: Res<player::ClashCounter>,
+){
+    for (component, mut text) in query.iter_mut(){
+        match component.0{
+            UIComponent::PlayerOneScore => {
+                text.sections[0].value = format!("Player 1: {}", points.player_1);
+            }
+            UIComponent::ClashCounter => {
+                text.sections[0].value = format!("Clash Counter: {}", clash_counter.0);
+            }
+            UIComponent::PlayerTwoScore => {
+                text.sections[0].value = format!("Player 2: {}", points.player_2);
+            }
+        }
+    }
+}
+
+fn reset_points(
+    mut keyboard_input: ResMut<ButtonInput<KeyCode>>,
+    mut points: ResMut<Points>,
+){
+    if keyboard_input.just_pressed(KeyCode::KeyU) {
+        points.player_1 = 0;
+        points.player_2 = 0;
+        keyboard_input.press(KeyCode::KeyI);
+        keyboard_input.release(KeyCode::KeyI);
+    }
+}
 
 fn setup(mut commands: Commands){
-    commands.spawn(Camera2dBundle::default());
+    let camera = commands.spawn(Camera2dBundle::default()).id();
 
     commands.spawn(NodeBundle{
         style: Style{
-            width: Val::Percent(100.0),
-            height: Val::Percent(100.0),
-            align_content: AlignContent::FlexStart,
+            width: Val::Percent(80.0),
+            height: Val::Percent(80.0),
+            justify_content: JustifyContent::SpaceBetween,
+            flex_direction: FlexDirection::Column,
+            justify_self: JustifySelf::Center,
             ..default()
         },
         ..default()
     }).with_children(
             |parent| {
-                parent.spawn(Text2dBundle{
-                    text: Text{
-                        sections: vec![TextSection{
-                            value: "Player 1: 0".to_string(),
-                            style: TextStyle{
-                                font_size: 40.0,
-                                color: Color::WHITE,
-                                font: Default::default(),
-                            },
-                        }],
-                        justify: JustifyText::Left,
-                        ..Default::default()
+                parent.spawn(NodeBundle{
+                    style: Style{
+                        width: Val::Percent(100.), 
+                        height: Val::Percent(50.),
+                        justify_content: JustifyContent::SpaceBetween,
+                        ..default()
                     },
-                    ..Default::default()
-                
-                });
-                parent.spawn(Text2dBundle{
-                    text: Text{
-                        sections: vec![TextSection{
-                            value: "Player 2: 0".to_string(),
-                            style: TextStyle{
-                                font_size: 40.0,
-                                color: Color::WHITE,
-                                font: Default::default(),
+                    ..default()
+                }).with_children(
+                    |parent|{
+                        parent.spawn(TextBundle{
+                            text: Text{
+                                sections: vec![TextSection{
+                                    value: "Player 1: 0".to_string(),
+                                    style: TextStyle{
+                                        font_size: 40.0,
+                                        color: Color::WHITE,
+                                        font: Default::default(),
+                                    },
+                                }],
+                                justify: JustifyText::Left,
+                                ..Default::default()
                             },
-                        }],
-                        justify: JustifyText::Right,
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                
-                });
+                            ..Default::default()
+                        }).insert(EditableUIComponent(UIComponent::PlayerOneScore));
+        
+                        parent.spawn(TextBundle{
+                            text: Text{
+                                sections: vec![TextSection{
+                                    value: "Clash Counter: 0".to_string(),
+                                    style: TextStyle{
+                                        font_size: 40.0,
+                                        color: Color::WHITE,
+                                        font: Default::default(),
+                                    },
+                                }],
+                                justify: JustifyText::Center,
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        }).insert(EditableUIComponent(UIComponent::ClashCounter));
+        
+                        parent.spawn(TextBundle{
+                            text: Text{
+                                sections: vec![TextSection{
+                                    value: "Player 2: 0".to_string(),
+                                    style: TextStyle{
+                                        font_size: 40.0,
+                                        color: Color::WHITE,
+                                        font: Default::default(),
+                                    },
+                                }],
+                                justify: JustifyText::Right,
+                                ..Default::default()
+                            },
+                            ..Default::default()
+                        }).insert(EditableUIComponent(UIComponent::PlayerTwoScore));
+                    }
+                );
+               
+               parent.spawn(
+                     NodeBundle{
+                          style: Style{
+                            width: Val::Percent(100.),
+                            height: Val::Percent(50.),
+                            justify_content: JustifyContent::End,
+                            align_items: AlignItems::Baseline,
+                            flex_direction: FlexDirection::ColumnReverse,
+                            ..default()
+                          },
+                          ..default()
+                     }
+                ).with_children(
+                     |parent|{
+                          parent.spawn(TextBundle{
+                            text: Text{
+                                 sections: vec![TextSection{
+                                      value: "Press U to reset points".to_string(),
+                                      style: TextStyle{
+                                        font_size: 40.0,
+                                        color: Color::WHITE,
+                                        font: Default::default(),
+                                      },
+                                 }],
+                                 justify: JustifyText::Center,
+                                 ..Default::default()
+                            },
+                            ..Default::default()
+                          });
+                     }
+               );
+
             }
-    );
+
+    ).insert(TargetCamera(camera));
 }
 
 fn score_point(
     mut ev_player_state_change: EventReader<player::PlayerStateChangeEvent>,
     mut points: ResMut<Points>,
-    query: Query<&player::Player>,
+    mut query: Query<(&mut player::Player)>,
+    time: Res<Time>,
+    mut keyboard_input: ResMut<ButtonInput<KeyCode>>,
 ){
+    points.reset_timer.tick(time.delta());
+    if points.reset_timer.just_finished(){
+        println!("Resetting game");
+        keyboard_input.press(KeyCode::KeyI);
+        keyboard_input.release(KeyCode::KeyI);
+    }
     for event in ev_player_state_change.read(){
         if event.1 == player::PlayerState::Dead{
+            points.reset_timer.reset();
             if let Ok(player) = query.get(event.0){
                 match player.player_number{
                     1 => points.player_2 += 1,
                     2 => points.player_1 += 1,
-                    _ => (),
+                    _ => unreachable!("Invalid player number"),
                 }
             }
+
         }
     }
 }
