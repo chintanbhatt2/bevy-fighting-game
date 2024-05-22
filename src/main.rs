@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 
-use bevy::{ecs::system::RunSystemOnce, input::keyboard::{self, KeyboardInput}, prelude::*, render::camera::RenderTarget, utils::HashMap, window::WindowRef};
+use bevy::{ecs::system::RunSystemOnce, input::keyboard::{self, KeyboardInput}, prelude::*, render::camera::{RenderTarget, ScalingMode}, utils::HashMap, window::WindowRef};
 use bevy_editor_pls::prelude::*;
 use bevy_tweening::TweeningPlugin;
 mod player;
@@ -26,6 +26,7 @@ fn main() {
 struct DevelopmentPlugin;
 impl Plugin for DevelopmentPlugin{
     fn build(&self, app: &mut App){
+        #[cfg(feature = "editor")]
         app.add_plugins(EditorPlugin::default());
     }
 }
@@ -108,19 +109,27 @@ fn update_ui(
 }
 
 fn reset_points(
-    mut keyboard_input: ResMut<ButtonInput<KeyCode>>,
+    keyboard_input: Res<ButtonInput<KeyCode>>,
+    mut ev_reset: EventWriter<player::ResetPlayers>,
     mut points: ResMut<Points>,
 ){
     if keyboard_input.just_pressed(KeyCode::KeyU) {
         points.player_1 = 0;
         points.player_2 = 0;
-        keyboard_input.press(KeyCode::KeyI);
-        keyboard_input.release(KeyCode::KeyI);
+        ev_reset.send(player::ResetPlayers);
     }
 }
 
 fn setup(mut commands: Commands){
-    let camera = commands.spawn(Camera2dBundle::default()).id();
+    let mut camera_bundle = Camera2dBundle::default();
+    camera_bundle.projection = OrthographicProjection{
+        scaling_mode: ScalingMode::FixedHorizontal(1000.),
+        scale: 2.5,
+        near: -1000.,
+        far: 1000.,
+        ..default()
+    };
+    let camera = commands.spawn(camera_bundle).id();
 
     commands.spawn(NodeBundle{
         style: Style{
@@ -129,6 +138,7 @@ fn setup(mut commands: Commands){
             justify_content: JustifyContent::SpaceBetween,
             flex_direction: FlexDirection::Column,
             justify_self: JustifySelf::Center,
+            align_self: AlignSelf::Center,
             ..default()
         },
         ..default()
@@ -236,13 +246,12 @@ fn score_point(
     mut points: ResMut<Points>,
     mut query: Query<(&mut player::Player)>,
     time: Res<Time>,
-    mut keyboard_input: ResMut<ButtonInput<KeyCode>>,
+    mut ev_reset: EventWriter<player::ResetPlayers>,
 ){
     points.reset_timer.tick(time.delta());
     if points.reset_timer.just_finished(){
         println!("Resetting game");
-        keyboard_input.press(KeyCode::KeyI);
-        keyboard_input.release(KeyCode::KeyI);
+        ev_reset.send(player::ResetPlayers);
     }
     for event in ev_player_state_change.read(){
         if event.1 == player::PlayerState::Dead{
