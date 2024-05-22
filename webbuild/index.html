@@ -5,12 +5,18 @@
       body {
         margin: 0;
         background: darkgrey;
-        background-size: 400% 400%;
+        background-size: 100% 100%;
         animation: gradient 15s ease infinite;
         height: 100vh;
-        display: flex;
+        width: 100vw;
         justify-content: center;
-        align-items: center;    
+        align-items: center;
+
+        display: flex;
+      }
+
+      #bevy .bevy-canvas {
+
       }
       .loader {
         border: 16px solid #f3f3f3;
@@ -35,8 +41,10 @@
       }
       </style>
   </head>
-  <body>
+  <body >
     <div class="loader"></div>
+    
+    <canvas id="bevy" class="bevy-canvas" width="100vw" height="100vh"></canvas>
     <script>
         // the following function keeps track of all AudioContexts and resumes them on the first user
         // interaction with the page. If the function is called and all contexts are already running,
@@ -99,7 +107,7 @@
         })();
     </script>
     <script type="module">
-        import init from './out/project_name_here.js'
+        import init from './out/bevy-fighting-game.js'
         init();
     </script>
 </body>

@@ -2,14 +2,31 @@
 
 use std::time::Duration;
 
-use bevy::{ecs::system::RunSystemOnce, input::keyboard::{self, KeyboardInput}, prelude::*, render::camera::{RenderTarget, ScalingMode}, utils::HashMap, window::WindowRef};
+use bevy::{ecs::system::RunSystemOnce, input::keyboard::{self, KeyboardInput}, prelude::*, render::camera::{RenderTarget, ScalingMode}, utils::HashMap, window::{PresentMode, WindowMode, WindowRef, WindowResolution}};
 use bevy_editor_pls::prelude::*;
 use bevy_tweening::TweeningPlugin;
 mod player;
 
 fn main() {
+    let window = Window {
+        canvas: Some("#bevy".to_string()),
+        resizable: true,
+        present_mode: PresentMode::AutoNoVsync,
+        resize_constraints: WindowResizeConstraints{
+            min_width: 800.0,
+            min_height: 600.0,
+            max_height: 1313.0,
+            max_width: 2560.0,
+        },
+        ..default()
+    };
+
+    
     App::default()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin{
+            primary_window: Some(window),
+            ..default()
+        }))
         .add_plugins(player::PlayerPlugin)
         .add_plugins(DevelopmentPlugin)
         .add_plugins(TweeningPlugin)

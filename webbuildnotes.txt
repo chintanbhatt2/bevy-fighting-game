@@ -1,0 +1,7 @@
+# make wasm_run
+rustup target add wasm32-unknown-unknown  # should have been done previously
+cargo install -f wasm-bindgen-cli  # or see https://crates.io/crates/wasm-server-runner
+cargo build --release --target wasm32-unknown-unknown
+wasm-bindgen --out-dir ./webbuild/out/ --target web ./target/wasm32-unknown-unknown/release/bevy-fighting-game.wasm
+cp -r assets ./webbuild/
+npx serve webbuild  # then navigate to http://localhost:3000
