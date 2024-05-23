@@ -79,7 +79,7 @@ impl Default for Player {
             state: PlayerState::Alive,
             color_mesh_handle: Default::default(),
             attack_timer: Timer::from_seconds(1.0, TimerMode::Once),
-            parry_timer: Timer::from_seconds(0.016, TimerMode::Once),
+            parry_timer: Timer::from_seconds(0.016*4.0, TimerMode::Once),
             clashing_timer: Timer::from_seconds(1.0, TimerMode::Once),
             color: Color::rgb(1.0, 0.7, 0.6),
         }
@@ -138,8 +138,9 @@ fn move_player(
     mut ev_attack: EventWriter<AttackEvent>,
     clash_counter: Res<ClashCounter>,
     camera_query: Query<(&Camera, &OrthographicProjection), With<Transform>>,
+    time: Res<Time>,
 ) {
-    const MOVE_AMOUNT: f32 = 8.0;
+    let MOVE_AMOUNT: f32 = 650.0 * time.delta_seconds();
     
     if let Some((_, ortho_proj)) = camera_query.iter().find(|cam| cam.0.is_active == true).take(){
         let bounds = ortho_proj.area;
