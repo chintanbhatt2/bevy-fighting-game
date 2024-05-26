@@ -129,10 +129,12 @@ fn reset_points(
     keyboard_input: Res<ButtonInput<KeyCode>>,
     mut ev_reset: EventWriter<player::ResetPlayers>,
     mut points: ResMut<Points>,
+    mut clash_counter: ResMut<player::ClashCounter>,
 ){
     if keyboard_input.just_pressed(KeyCode::KeyU) {
         points.player_1 = 0;
         points.player_2 = 0;
+        clash_counter.0 = 0;
         ev_reset.send(player::ResetPlayers);
     }
 }

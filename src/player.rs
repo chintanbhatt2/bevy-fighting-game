@@ -100,7 +100,6 @@ pub struct ResetPlayers;
 fn reset_player_function(
     mut ev_reset: EventReader<ResetPlayers>,
     mut query: Query<(&mut Player, Entity, &mut Transform)>,
-    mut clash_counter: ResMut<ClashCounter>,
     mut ev_player_state_change: EventWriter<PlayerStateChangeEvent>,
 ) {
     for _ in ev_reset.read() {
@@ -116,7 +115,6 @@ fn reset_player_function(
         if p1.is_none() || p2.is_none() {
             return;
         }
-        clash_counter.0 = 0;
         let (mut player1, entity1, mut t1) = p1.unwrap();
         let (mut player2, entity2, mut t2) = p2.unwrap();
         player1.state = PlayerState::Alive;
