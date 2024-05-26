@@ -2,8 +2,7 @@
 
 use std::time::Duration;
 
-use bevy::{ecs::system::RunSystemOnce, input::keyboard::{self, KeyboardInput}, prelude::*, render::camera::{RenderTarget, ScalingMode}, utils::HashMap, window::{PresentMode, WindowMode, WindowRef, WindowResolution}};
-use bevy_editor_pls::prelude::*;
+use bevy::{prelude::*, render::camera::ScalingMode, utils::HashMap, window::PresentMode};
 use bevy_tweening::TweeningPlugin;
 mod player;
 
@@ -263,7 +262,7 @@ fn setup(mut commands: Commands){
 fn score_point(
     mut ev_player_state_change: EventReader<player::PlayerStateChangeEvent>,
     mut points: ResMut<Points>,
-    mut query: Query<(&mut player::Player)>,
+    query: Query<&mut player::Player>,
     time: Res<Time>,
     mut ev_reset: EventWriter<player::ResetPlayers>,
 ){

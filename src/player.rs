@@ -1,10 +1,8 @@
 use std::time::Duration;
 
 use bevy::{
-    ecs::system::{RunSystemOnce, SystemId},
     prelude::*,
     sprite::{MaterialMesh2dBundle, Mesh2dHandle},
-    transform,
 };
 use bevy_tweening::{lens::TransformPositionLens, Animator, EaseFunction, Tween};
 
@@ -27,7 +25,6 @@ impl Plugin for PlayerPlugin {
                     player_timer_update,
                     reset_player_function,
                     move_player,
-                    player_taking_damage,
                     reset_player,
                     check_attack_hit,
                     update_player_color,
@@ -138,33 +135,31 @@ fn move_player(
     camera_query: Query<(&Camera, &OrthographicProjection), With<Transform>>,
     time: Res<Time>,
 ) {
-    let MOVE_AMOUNT: f32 = 650.0 * time.delta_seconds();
+    let move_amount: f32 = 650.0 * time.delta_seconds();
     
-    if let Some((_, ortho_proj)) = camera_query.iter().find(|cam| cam.0.is_active == true).take(){
+    if let Some((_, ortho_proj)) = camera_query.iter().find(|cam| cam.0.is_active).take(){
         let bounds = ortho_proj.area;
 
         for (mut player, mut transform, entity) in query.iter_mut() {
             if let Some(controls) = controls.control_map.get(&entity) {
                 if matches!(player.state, PlayerState::Alive | PlayerState::TakingDamage) {
                     if keyboard_input.pressed(controls.right) {
-                        transform.translation.x += MOVE_AMOUNT + (clash_counter.0 as f32);
+                        transform.translation.x += move_amount + (clash_counter.0 as f32);
                     }
                     if keyboard_input.pressed(controls.left) {
-                        transform.translation.x += -(MOVE_AMOUNT + (clash_counter.0 as f32));
+                        transform.translation.x += -(move_amount + (clash_counter.0 as f32));
                     }
                 }
                 if matches!(player.state, PlayerState::Wiff) {
                     if keyboard_input.pressed(controls.right) {
-                        transform.translation.x += MOVE_AMOUNT * 0.1;
+                        transform.translation.x += move_amount * 0.1;
                     }
                     if keyboard_input.pressed(controls.left) {
-                        transform.translation.x += -MOVE_AMOUNT * 0.1;
+                        transform.translation.x += -move_amount * 0.1;
                     }
                 }
-                if matches!(player.state, PlayerState::Alive | PlayerState::TakingDamage) {
-                    if keyboard_input.just_pressed(controls.attack) {
-                        player_attack(&mut ev_attack, &mut player, &entity);
-                    }
+                if matches!(player.state, PlayerState::Alive | PlayerState::TakingDamage) && keyboard_input.just_pressed(controls.attack) {
+                    player_attack(&mut ev_attack, &mut player, &entity);
                 }
 
                 transform.translation.x = transform.translation.x.clamp(bounds.min.x+50., bounds.max.x-50.);
@@ -182,7 +177,7 @@ fn player_attack(ev_attack: &mut EventWriter<AttackEvent>, player: &mut Player, 
     if player.attack_timer.finished() {
         println!("Player {:?} attacking!", player.player_number);
         player.attack_timer.reset();
-        ev_attack.send(AttackEvent(entity.clone()));
+        ev_attack.send(AttackEvent(*entity));
     }
 }
 
@@ -259,7 +254,6 @@ fn check_attack_hit(
 
 #[derive(Component)]
 struct ClashPushback {
-    pub offset: i8,
     pub timer: Timer,
 }
 
@@ -295,7 +289,7 @@ fn clash_players(
         } else {
             1
         };
-        let p2_offset = p1_offset * -1;
+        let p2_offset = -p1_offset;
 
         // commands.entity(ev.0).insert(ClashPushback{offset: p1_offset, timer: Timer::from_seconds(0.8, TimerMode::Once)});
         // commands.entity(ev.1).insert(ClashPushback{offset: p2_offset, timer: Timer::from_seconds(0.8, TimerMode::Once)});
@@ -329,10 +323,10 @@ fn clash_players(
 }
 
 fn push_back_player_with_clash(
-    mut query: Query<(&mut Player, &mut Transform, &mut ClashPushback, Entity)>,
+    mut query: Query<(&mut Player, &mut ClashPushback)>,
     time: Res<Time>,
 ) {
-    for (mut player, transform, mut clash_pushback, entity) in query.iter_mut() {
+    for (mut player,  mut clash_pushback) in query.iter_mut() {
         clash_pushback.timer.tick(time.delta());
         if clash_pushback.timer.finished() {
             player.state = PlayerState::Alive;
@@ -397,11 +391,6 @@ fn spawn_players(
     );
 }
 
-fn player_taking_damage(
-    mut query: Query<(&mut Player, Entity)>,
-    mut ev_player_state_change: EventWriter<PlayerStateChangeEvent>,
-) {
-}
 
 fn player_timer_update(
     time: Res<Time>,
@@ -431,7 +420,7 @@ fn update_player_color(
     mut query: Query<(&mut Player, &mut Transform)>,
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
-    for (mut player, mut transform) in query.iter_mut() {
+    for (player, mut transform) in query.iter_mut() {
         player.state;
 
         if !player.attack_timer.finished() && player.state != PlayerState::Dead {
