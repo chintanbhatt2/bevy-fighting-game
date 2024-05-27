@@ -76,7 +76,7 @@ impl Default for Player {
             state: PlayerState::Alive,
             color_mesh_handle: Default::default(),
             attack_timer: Timer::from_seconds(1.0, TimerMode::Once),
-            parry_timer: Timer::from_seconds(0.016*4.0, TimerMode::Once),
+            parry_timer: Timer::from_seconds(0.016 * 4.0, TimerMode::Once),
             clashing_timer: Timer::from_seconds(1.0, TimerMode::Once),
             color: Color::rgb(1.0, 0.7, 0.6),
         }
@@ -136,8 +136,8 @@ fn move_player(
     time: Res<Time>,
 ) {
     let move_amount: f32 = 650.0 * time.delta_seconds();
-    
-    if let Some((_, ortho_proj)) = camera_query.iter().find(|cam| cam.0.is_active).take(){
+
+    if let Some((_, ortho_proj)) = camera_query.iter().find(|cam| cam.0.is_active).take() {
         let bounds = ortho_proj.area;
 
         for (mut player, mut transform, entity) in query.iter_mut() {
@@ -158,11 +158,16 @@ fn move_player(
                         transform.translation.x += -move_amount * 0.1;
                     }
                 }
-                if matches!(player.state, PlayerState::Alive | PlayerState::TakingDamage) && keyboard_input.just_pressed(controls.attack) {
+                if matches!(player.state, PlayerState::Alive | PlayerState::TakingDamage)
+                    && keyboard_input.just_pressed(controls.attack)
+                {
                     player_attack(&mut ev_attack, &mut player, &entity);
                 }
 
-                transform.translation.x = transform.translation.x.clamp(bounds.min.x+50., bounds.max.x-50.);
+                transform.translation.x = transform
+                    .translation
+                    .x
+                    .clamp(bounds.min.x + 50., bounds.max.x - 50.);
             }
         }
     }
@@ -326,7 +331,7 @@ fn push_back_player_with_clash(
     mut query: Query<(&mut Player, &mut ClashPushback)>,
     time: Res<Time>,
 ) {
-    for (mut player,  mut clash_pushback) in query.iter_mut() {
+    for (mut player, mut clash_pushback) in query.iter_mut() {
         clash_pushback.timer.tick(time.delta());
         if clash_pushback.timer.finished() {
             player.state = PlayerState::Alive;
@@ -391,7 +396,6 @@ fn spawn_players(
     );
 }
 
-
 fn player_timer_update(
     time: Res<Time>,
     mut query: Query<(&mut Player, Entity)>,
@@ -421,8 +425,6 @@ fn update_player_color(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     for (player, mut transform) in query.iter_mut() {
-        player.state;
-
         if !player.attack_timer.finished() && player.state != PlayerState::Dead {
             materials.get_mut(&player.color_mesh_handle).unwrap().color = Color::rgb(
                 player.color.r() * 0.5,
